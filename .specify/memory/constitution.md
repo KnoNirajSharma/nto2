@@ -15,12 +15,12 @@ This project exists for learning and demonstration, so every feature must remain
 
 ### II. Security-by-Default
 All protected pages and service methods must enforce authorization before exposing data or state. No user may access records outside their allowed scope; role checks, page attributes, and service validation must all agree. The mock authentication and authorization model is for training and must never be treated as production security.
-
 ### III. Test-First Behavior
 Any new behavior or change in access rules must start with a failing specification or test description. Features are implemented only after the expected user-visible behavior is written down and validated. The team must verify that tasks, projects, notifications, and authorization rules behave correctly before merging.
 
 ### IV. Separation of Concerns
-Business logic, data access, authentication, and UI concerns must remain distinct. Services own domain rules and authorization decisions; pages and components orchestrate user interaction; data models and the DbContext define persistence boundaries. Avoid mixing infrastructure concerns directly into the UI.
+Business logic, data access, authentication, and UI concerns must remain distinct. Services own domain rules and authorization decisions; pages and components orchestrate user interaction; data models 
+and the DbContext define persistence boundaries. Avoid mixing infrastructure concerns directly into the UI.
 
 ### V. Simple, Explainable Architecture
 Prefer small, readable components and clear service boundaries over clever abstractions. The codebase must remain understandable to learners, with names that reflect the domain, straightforward flows, and minimal hidden state. When a pattern improves clarity and maintainability, prefer it over complexity for its own sake.
