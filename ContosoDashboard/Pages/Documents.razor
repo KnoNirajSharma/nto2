@@ -1,0 +1,238 @@
+@page "/documents"
+@attribute [Authorize]
+@inject IDocumentService DocumentService
+@inject IProjectService ProjectService
+@inject AuthenticationStateProvider AuthenticationStateProvider
+
+<PageTitle>Documents - ContosoDashboard</PageTitle>
+
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col">
+            <h1>Documents</h1>
+            <p class="text-muted">Upload and organize work documents for your personal or project workspace.</p>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(feedbackMessage))
+    {
+        <div class="alert @(uploadSucceeded ? "alert-success" : "alert-danger")" role="alert">
+            @feedbackMessage
+        </div>
+    }
+
+    <div class="row g-4">
+        <div class="col-lg-5">
+            <div class="card">
+                <div class="card-body">
+                    <h2 class="h4">Upload document</h2>
+                    <p class="text-muted">Files are held for security scanning before they become available.</p>
+
+                    <div class="mb-3">
+                        <label for="document-title" class="form-label">Title</label>
+                        <input id="document-title" class="form-control" @bind="title" maxlength="255" />
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="document-category" class="form-label">Category</label>
+                        <input id="document-category" class="form-control" @bind="category" maxlength="255" placeholder="For example: Project brief" />
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="document-description" class="form-label">Description</label>
+                        <textarea id="document-description" class="form-control" @bind="description" rows="3" maxlength="2000"></textarea>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="document-project" class="form-label">Project</label>
+                        <select id="document-project" class="form-select" @bind="selectedProjectId">
+                            <option value="">Personal document</option>
+                            @foreach (var project in projects)
+                            {
+                                <option value="@project.ProjectId">@project.Name</option>
+                            }
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="document-tags" class="form-label">Tags</label>
+                        <input id="document-tags" class="form-control" @bind="tags" maxlength="2000" placeholder="planning, requirements" />
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="document-file" class="form-label">File</label>
+                        <InputFile id="document-file" OnChange="OnFileSelected" class="form-control" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.png,.jpg,.jpeg,.gif,.txt,.csv" />
+                        <div class="form-text">PDF, Office, image, or text files up to 25 MB.</div>
+                    </div>
+
+                    @if (selectedFile is not null)
+                    {
+                        <div class="small text-muted mb-3">Selected: @selectedFile.Name (@FormatFileSize(selectedFile.Size))</div>
+                    }
+
+                    <button type="button" class="btn btn-primary" @onclick="UploadAsync" disabled="@(isUploading || selectedFile is null)">
+                        @if (isUploading)
+                        {
+                            <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
+                            <span>Uploading...</span>
+                        }
+                        else
+                        {
+                            <span class="bi bi-upload me-2" aria-hidden="true"></span>
+                            <span>Upload document</span>
+                        }
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-7">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h2 class="h4 mb-0">My documents</h2>
+                <span class="badge bg-secondary">@documents.Count</span>
+            </div>
+
+            @if (documents.Count == 0)
+            {
+                <div class="alert alert-info">No documents uploaded yet.</div>
+            }
+            else
+            {
+                <div class="list-group">
+                    @foreach (var document in documents)
+                    {
+                        <div class="list-group-item">
+                            <div class="d-flex justify-content-between gap-3">
+                                <div>
+                                    <h3 class="h6 mb-1">@document.Title</h3>
+                                    <div class="small text-muted">@document.FileName</div>
+                                    @if (!string.IsNullOrWhiteSpace(document.Category))
+                                    {
+                                        <span class="badge bg-light text-dark me-1">@document.Category</span>
+                                    }
+                                    @if (document.Project is not null)
+                                    {
+                                        <span class="badge bg-light text-dark">@document.Project.Name</span>
+                                    }
+                                </div>
+                                <span class="badge @GetStatusClass(document.Status)">@GetStatusLabel(document.Status)</span>
+                            </div>
+                            <div class="small text-muted mt-2">Uploaded @document.UploadedDate.ToLocalTime().ToString("MMM dd, yyyy")</div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    private readonly List<Document> documents = new();
+    private readonly List<Project> projects = new();
+    private IBrowserFile? selectedFile;
+    private string title = string.Empty;
+    private string category = string.Empty;
+    private string description = string.Empty;
+    private string tags = string.Empty;
+    private int? selectedProjectId;
+    private int currentUserId;
+    private bool isUploading;
+    private bool uploadSucceeded;
+    private string? feedbackMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var userIdClaim = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier);
+        if (userIdClaim is null || !int.TryParse(userIdClaim.Value, out currentUserId) || currentUserId <= 0)
+        {
+            feedbackMessage = "Your user account could not be identified.";
+            return;
+        }
+
+        projects.AddRange(await ProjectService.GetUserProjectsAsync(currentUserId));
+        await LoadDocumentsAsync();
+    }
+
+    private void OnFileSelected(InputFileChangeEventArgs args)
+    {
+        selectedFile = args.File;
+        feedbackMessage = null;
+    }
+
+    private async Task UploadAsync()
+    {
+        if (selectedFile is null || currentUserId <= 0)
+        {
+            return;
+        }
+
+        isUploading = true;
+        feedbackMessage = null;
+        uploadSucceeded = false;
+
+        try
+        {
+            await using var stream = selectedFile.OpenReadStream(25 * 1024 * 1024);
+            await DocumentService.UploadDocumentAsync(
+                currentUserId,
+                title,
+                category,
+                description,
+                selectedProjectId,
+                tags,
+                selectedFile.Name,
+                selectedFile.ContentType,
+                stream);
+
+            uploadSucceeded = true;
+            feedbackMessage = "Document uploaded and queued for security scanning.";
+            title = string.Empty;
+            category = string.Empty;
+            description = string.Empty;
+            tags = string.Empty;
+            selectedProjectId = null;
+            selectedFile = null;
+            await LoadDocumentsAsync();
+        }
+        catch (Exception exception)
+        {
+            feedbackMessage = exception.Message;
+        }
+        finally
+        {
+            isUploading = false;
+        }
+    }
+
+    private async Task LoadDocumentsAsync()
+    {
+        documents.Clear();
+        documents.AddRange(await DocumentService.GetUserDocumentsAsync(currentUserId));
+    }
+
+    private static string FormatFileSize(long size)
+    {
+        return size < 1024 * 1024
+            ? $"{size / 1024d:0.0} KB"
+            : $"{size / (1024d * 1024d):0.0} MB";
+    }
+
+    private static string GetStatusLabel(DocumentStatus status) => status switch
+    {
+        DocumentStatus.PendingScan => "Pending scan",
+        DocumentStatus.Approved => "Approved",
+        DocumentStatus.Blocked => "Blocked",
+        DocumentStatus.Failed => "Scan failed",
+        DocumentStatus.Deleted => "Deleted",
+        _ => status.ToString()
+    };
+
+    private static string GetStatusClass(DocumentStatus status) => status switch
+    {
+        DocumentStatus.Approved => "bg-success",
+        DocumentStatus.Blocked or DocumentStatus.Failed => "bg-danger",
+        DocumentStatus.Deleted => "bg-secondary",
+        _ => "bg-warning text-dark"
+    };
+}
