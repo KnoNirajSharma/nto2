@@ -1,4 +1,5 @@
 # ContosoDashboard
+<img width="1891" height="1087" alt="image" src="https://github.com/user-attachments/assets/e55fd96e-4b8e-4490-9acd-dea26973e3bf" />
 
 The ContosoDashboard application is intended for TRAINING PURPOSES ONLY.
 
